@@ -70,13 +70,17 @@ async function askGemini(prompt, history = []) {
   const apiKey = process.env.GEMINI_API_KEY;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-  const contents = [
-    ...history.map(h => ({
-      role: h.role === 'user' ? 'user' : 'model',
-      parts: [{ text: h.text }]
-    })),
-    { role: 'user', parts: [{ text: prompt }] }
-  ];
+  const persona = (process.env.PERSONA_PROMPT || '').trim();
+
+const contents = [
+  { role: 'user', parts: [{ text: persona }] },
+  ...history.map(h => ({
+    role: h.role === 'user' ? 'user' : 'model',
+    parts: [{ text: h.text }]
+  })),
+  { role: 'user', parts: [{ text: prompt }] }
+];
+
 
   const r = await fetch(url, {
     method: 'POST',
