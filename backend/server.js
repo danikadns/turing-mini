@@ -99,6 +99,24 @@ async function askGemini(prompt, history = []) {
     const t = plantillas[Math.floor(Math.random()*plantillas.length)];
     return t(prompt);
   }
+  // Instrucciones de estilo "humano"
+  const persona = `
+    Habla como un operador humano latinoamericano, amable y conciso.
+    - Respuestas de 1 a 3 frases, tono natural.
+    - Puedes usar muletillas leves: “vale”, “bien”, “ok”, “mmm…”.
+    - Evita sonar a IA (no digas “como modelo de lenguaje”, ni cites tu entrenamiento).
+    - Comete imperfecciones sutiles (una pausa, un “eh”), pero no errores ortográficos.
+    - Si falta contexto, pide 1 dato puntual antes de responder en exceso.
+  `;
+
+  const contents = [
+    { role: 'user', parts: [{ text: persona.trim() }] },
+    ...history.map(h => ({
+      role: h.role === 'user' ? 'user' : 'model',
+      parts: [{ text: h.text }]
+    })),
+    { role: 'user', parts: [{ text: prompt }] }
+  ];
   // ...
 }
 
@@ -107,13 +125,7 @@ async function askGemini(prompt, history = []) {
   const apiKey = process.env.GEMINI_API_KEY;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-  const contents = [
-    ...history.map(h => ({
-      role: h.role === 'user' ? 'user' : 'model',
-      parts: [{ text: h.text }]
-    })),
-    { role: 'user', parts: [{ text: prompt }] }
-  ];
+  
 
   const r = await fetch(url, {
     method: 'POST',
