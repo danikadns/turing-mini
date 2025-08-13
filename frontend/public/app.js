@@ -22,11 +22,22 @@ function setTyping(v) {
   typingEl.classList.toggle('hidden', !v);
 }
 
-async function startSession() {
-  const r = await fetch(`${API_BASE}/api/session`, { method: 'POST' });
+async function startSession(mode) {
+  const r = await fetch(`${API_BASE}/api/session`, { 
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode }) // se envía AI o human o ""
+  });
   const data = await r.json();
   sessionId = data.sessionId;
 }
+// Evento del botón:
+document.getElementById('startBtn').addEventListener('click', async () => {
+  const mode = document.getElementById('modeSelect').value;
+  await startSession(mode);
+  poll();
+  setInterval(poll, 2000);
+});
 
 async function poll() {
   if (!sessionId) return;
