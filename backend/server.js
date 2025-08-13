@@ -41,9 +41,12 @@ const sessions = new Map();
 let globalIndex = 0; // contador para messages.i
 
 // Utilidades
-function createSession() {
+function createSession(condition) {
   const id = nanoid(10);
-  const condition = Math.random() < 0.5 ? 'AI' : 'human';
+  // Si no envían condition, sigue aleatorio
+  if (!condition || !['AI', 'human'].includes(condition)) {
+    condition = Math.random() < 0.5 ? 'AI' : 'human';
+  }
   const s = { id, condition, createdAt: new Date().toISOString(), messages: [], awaitingOperator: false };
   sessions.set(id, s);
   return s;
@@ -102,8 +105,10 @@ const contents = [
 app.get('/', (req, res) => res.send('pong'));
 
 // Crear sesión
+// En /api/session:
 app.post('/api/session', (req, res) => {
-  const s = createSession();
+  const { mode } = req.body; // 'AI' o 'human'
+  const s = createSession(mode);
   res.json({ sessionId: s.id });
 });
 
