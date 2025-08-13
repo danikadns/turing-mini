@@ -24,6 +24,23 @@ header, footer {
   color: #c4c9ff; 
 }
 
+.chat-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;           /* separación entre el select y el botón */
+  padding: 8px 16px;  /* mismo estilo que header */
+}
+
+.chat-controls select {
+  width: auto;        /* para que no se expanda */
+  min-width: 150px;   /* ancho mínimo */
+}
+
+.chat-controls button {
+  white-space: nowrap; /* evita que el texto se corte */
+}
+
+
 /* MAIN ahora ocupa todo el espacio disponible */
 main { 
   flex: 1 1 auto;
