@@ -7,6 +7,26 @@ import { nanoid } from 'nanoid';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const persona = `
+Habla como un operador humano latinoamericano, amable y conciso.
+- Respuestas de 1 a 3 frases, tono natural.
+- Puedes usar muletillas leves: “vale”, “bien”, “ok”, “mmm…”.
+- Evita sonar a IA (no digas “como modelo de lenguaje”, ni cites tu entrenamiento).
+- Comete imperfecciones sutiles (una pausa, un “eh”), pero no errores ortográficos.
+- Si falta contexto, pide 1 dato puntual antes de responder en exceso.
+`;
+
+const contents = [
+  // Inyectamos "instrucciones" como primer mensaje
+  { role: 'user', parts: [{ text: persona.trim() }] },
+  ...history.map(h => ({
+    role: h.role === 'user' ? 'user' : 'model',
+    parts: [{ text: h.text }]
+  })),
+  { role: 'user', parts: [{ text: prompt }] }
+];
+
+
 // CORS: permitir tu dominio de Netlify (o * en dev)
 const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || '*';
 app.use(cors({
@@ -60,11 +80,28 @@ function isAwaitingOperator(session) {
 }
 
 // Gemini proxy (o stub)
-async function askGemini(prompt, history = []) {
+//async function askGemini(prompt, history = []) {
   // Si no hay API key -> responder stub
+  //if (!process.env.GEMINI_API_KEY) {
+    //return `🧪 (Stub IA) Me pediste: "${prompt}". Si configuras GEMINI_API_KEY responderé con Gemini.`;
+  //}
+// Gemini proxy (o stub)
+async function askGemini(prompt, history = []) {
+  // Si no hay API key -> responder stub "humanoide"
   if (!process.env.GEMINI_API_KEY) {
-    return `🧪 (Stub IA) Me pediste: "${prompt}". Si configuras GEMINI_API_KEY responderé con Gemini.`;
+    // respuestas cortas y naturales
+    const plantillas = [
+      txt => `Vale, te entiendo. Sobre eso: ${txt ? 'déjame pensar un segundo…' : ''}`,
+      txt => `Gracias por contarlo. ¿Qué te gustaría lograr exactamente?`,
+      txt => `Tiene sentido. Puedo darte una mano con eso.`,
+      txt => `Ok. ¿Podrías darme un poco más de contexto?`
+    ];
+    const t = plantillas[Math.floor(Math.random()*plantillas.length)];
+    return t(prompt);
   }
+  // ...
+}
+
 
   // API Gemini (modelo rápido y económico)
   const apiKey = process.env.GEMINI_API_KEY;
@@ -114,11 +151,15 @@ app.post('/api/chat', async (req, res) => {
     pushMessage(s, 'user', String(text).slice(0, 2000)); // límite sencillo
 
     if (s.condition === 'AI') {
-      const history = s.messages.filter(m => m.role !== 'ai');
-      const reply = await askGemini(text, history);
-      pushMessage(s, 'ai', reply);
-      return res.json({ reply, queued: false });
-    } else {
+  const history = s.messages.filter(m => m.role !== 'ai');
+  // Latencia simulada: base 600–1800ms + 20ms por carácter (máx 2.5s)
+  const delayMs = Math.min(2500, 600 + Math.random()*1200 + String(text).length*20);
+  await new Promise(r => setTimeout(r, delayMs));
+
+  const reply = await askGemini(text, history);
+  pushMessage(s, 'ai', reply);
+  return res.json({ reply, queued: false });
+}else {
       s.awaitingOperator = true;
       return res.json({ queued: true });
     }
