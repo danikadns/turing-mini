@@ -7,24 +7,6 @@ import { nanoid } from 'nanoid';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const persona = `
-Habla como un operador humano latinoamericano, amable y conciso.
-- Respuestas de 1 a 3 frases, tono natural.
-- Puedes usar muletillas leves: “vale”, “bien”, “ok”, “mmm…”.
-- Evita sonar a IA (no digas “como modelo de lenguaje”, ni cites tu entrenamiento).
-- Comete imperfecciones sutiles (una pausa, un “eh”), pero no errores ortográficos.
-- Si falta contexto, pide 1 dato puntual antes de responder en exceso.
-`;
-
-const contents = [
-  // Inyectamos "instrucciones" como primer mensaje
-  { role: 'user', parts: [{ text: persona.trim() }] },
-  ...history.map(h => ({
-    role: h.role === 'user' ? 'user' : 'model',
-    parts: [{ text: h.text }]
-  })),
-  { role: 'user', parts: [{ text: prompt }] }
-];
 
 
 // CORS: permitir tu dominio de Netlify (o * en dev)
@@ -86,19 +68,20 @@ function isAwaitingOperator(session) {
     //return `🧪 (Stub IA) Me pediste: "${prompt}". Si configuras GEMINI_API_KEY responderé con Gemini.`;
   //}
 // Gemini proxy (o stub)
+// Gemini proxy (o stub)
 async function askGemini(prompt, history = []) {
   // Si no hay API key -> responder stub "humanoide"
   if (!process.env.GEMINI_API_KEY) {
-    // respuestas cortas y naturales
     const plantillas = [
       txt => `Vale, te entiendo. Sobre eso: ${txt ? 'déjame pensar un segundo…' : ''}`,
       txt => `Gracias por contarlo. ¿Qué te gustaría lograr exactamente?`,
       txt => `Tiene sentido. Puedo darte una mano con eso.`,
       txt => `Ok. ¿Podrías darme un poco más de contexto?`
     ];
-    const t = plantillas[Math.floor(Math.random()*plantillas.length)];
+    const t = plantillas[Math.floor(Math.random() * plantillas.length)];
     return t(prompt);
   }
+
   // Instrucciones de estilo "humano"
   const persona = `
     Habla como un operador humano latinoamericano, amable y conciso.
@@ -117,31 +100,30 @@ async function askGemini(prompt, history = []) {
     })),
     { role: 'user', parts: [{ text: prompt }] }
   ];
-  // ...
-}
 
-
-  // API Gemini (modelo rápido y económico)
+  // API Gemini
   const apiKey = process.env.GEMINI_API_KEY;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
-  
 
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contents })
   });
+
   if (!r.ok) {
     const txt = await r.text();
     throw new Error(`Gemini HTTP ${r.status}: ${txt}`);
   }
+
   const data = await r.json();
   const text =
     data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ||
     'No obtuve respuesta del modelo.';
+
   return text;
 }
+
 
 // --- Rutas públicas ---
 app.get('/', (req, res) => res.send('pong'));
