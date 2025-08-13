@@ -7,11 +7,10 @@ import { nanoid } from 'nanoid';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORS: permitir tu dominio del frontend (o * en dev)
+// CORS: permitir tu dominio de Netlify (o * en dev)
 const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || '*';
 app.use(cors({
-  origin: (origin, cb) =>
-    cb(null, ALLOWED_ORIGIN === '*' ? true : origin === ALLOWED_ORIGIN),
+  origin: (origin, cb) => cb(null, ALLOWED_ORIGIN === '*' ? true : origin === ALLOWED_ORIGIN),
   credentials: true
 }));
 
@@ -25,8 +24,7 @@ function requireBasicAuth(req, res, next) {
   if (!BASIC_USER || !BASIC_PASS) return next();
   const header = req.headers.authorization || '';
   const [type, b64] = header.split(' ');
-  if (type !== 'Basic' || !b64)
-    return res.status(401).set('WWW-Authenticate', 'Basic').send('Auth requerida');
+  if (type !== 'Basic' || !b64) return res.status(401).set('WWW-Authenticate', 'Basic').send('Auth requerida');
   const [u, p] = Buffer.from(b64, 'base64').toString().split(':');
   if (u === BASIC_USER && p === BASIC_PASS) return next();
   return res.status(401).set('WWW-Authenticate', 'Basic').send('Credenciales inválidas');
@@ -61,44 +59,22 @@ function isAwaitingOperator(session) {
   return !!last && last.role === 'user';
 }
 
-// Gemini proxy con "persona humana"
+// Gemini proxy (o stub)
 async function askGemini(prompt, history = []) {
-  // Persona: estilo humano breve y natural (personalizable con PERSONA_PROMPT)
-  const persona =
-    (process.env.PERSONA_PROMPT || `
-Habla como un operador humano latinoamericano, amable y conciso.
-- Respuestas de 1 a 3 frases, tono natural.
-- Puedes usar muletillas leves: "vale", "bien", "ok", "mmm…".
-- Evita sonar a IA (no digas "como modelo de lenguaje", ni cites tu entrenamiento).
-- Comete imperfecciones sutiles (una pausa, un "eh"), pero sin faltas graves.
-- Si falta contexto, pide 1 dato puntual antes de extenderte.
-`).trim();
-
-  // Si NO hay API key: stub humanoide (no delata IA)
+  // Si no hay API key -> responder stub
   if (!process.env.GEMINI_API_KEY) {
-    const plantillas = [
-      (txt) => `Vale, te sigo. ${txt ? 'Dame un segundo para pensarlo…' : ''}`,
-      () => `Bien, ¿qué objetivo quieres lograr exactamente?`,
-      () => `Tiene sentido. Déjame orientarte con lo esencial.`,
-      () => `Ok, ¿me das un poco más de contexto?`
-    ];
-    const t = plantillas[Math.floor(Math.random() * plantillas.length)];
-    return t(prompt);
+    return `🧪 (Stub IA) Me pediste: "${prompt}". Si configuras GEMINI_API_KEY responderé con Gemini.`;
   }
 
-  // Con API key: llama a Gemini 1.5 Flash con el persona
+  // API Gemini (modelo rápido y económico)
   const apiKey = process.env.GEMINI_API_KEY;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
   const contents = [
-    // Guía de estilo como primer turno
-    { role: 'user', parts: [{ text: persona }] },
-    // Historial
     ...history.map(h => ({
       role: h.role === 'user' ? 'user' : 'model',
       parts: [{ text: h.text }]
     })),
-    // Último prompt del usuario
     { role: 'user', parts: [{ text: prompt }] }
   ];
 
@@ -107,17 +83,14 @@ Habla como un operador humano latinoamericano, amable y conciso.
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contents })
   });
-
   if (!r.ok) {
     const txt = await r.text();
     throw new Error(`Gemini HTTP ${r.status}: ${txt}`);
   }
-
   const data = await r.json();
   const text =
     data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ||
-    'Entiendo. Dame un poco más de detalle y te ayudo mejor.';
-
+    'No obtuve respuesta del modelo.';
   return text;
 }
 
@@ -142,12 +115,6 @@ app.post('/api/chat', async (req, res) => {
 
     if (s.condition === 'AI') {
       const history = s.messages.filter(m => m.role !== 'ai');
-
-      // Latencia simulada: 600–1800ms + 15–25ms por carácter, tope 2500ms
-      const perChar = 15 + Math.random() * 10; // 15–25ms/char
-      const delayMs = Math.min(2500, 600 + Math.random() * 1200 + String(text).length * perChar);
-      await new Promise(r => setTimeout(r, delayMs));
-
       const reply = await askGemini(text, history);
       pushMessage(s, 'ai', reply);
       return res.json({ reply, queued: false });
