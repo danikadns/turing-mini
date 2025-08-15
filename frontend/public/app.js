@@ -22,6 +22,7 @@ function setTyping(v) {
   typingEl.classList.toggle('hidden', !v);
 }
 
+/*
 async function startSession(mode) {
   const r = await fetch(`${API_BASE}/api/session`, { 
     method: 'POST',
@@ -37,7 +38,7 @@ document.getElementById('startBtn').addEventListener('click', async () => {
   await startSession(mode);
   poll();
   setInterval(poll, 2000);
-});
+});*/
 
 async function poll() {
   if (!sessionId) return;
