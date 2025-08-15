@@ -7,6 +7,9 @@ import { nanoid } from 'nanoid';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+console.log('GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? 'Cargada' : 'NO cargada');
+console.log('[boot] GEMINI_MODEL:', process.env.GEMINI_MODEL || 'gemini-2.0-flash');
+
 // CORS: permitir tu dominio de Netlify (o * en dev)
 const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || '*';
 app.use(cors({
@@ -71,7 +74,8 @@ async function askGemini(prompt, history = []) {
 
   // API Gemini (modelo rápido y económico)
   const apiKey = process.env.GEMINI_API_KEY;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  //const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
   const persona = (process.env.PERSONA_PROMPT || '').trim();
 
