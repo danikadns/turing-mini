@@ -5,12 +5,10 @@ const chatEl = document.getElementById('chat');
 const form = document.getElementById('form');
 const input = document.getElementById('input');
 const typingEl = document.getElementById('typing');
+const btnDebrief = document.getElementById('btnDebrief');
 
 let sessionId = null;
 let lastIndex = 0; // último i recibido
-let ended = false;
-let expiresAt = null;
-let endTimer = null;
 
 function addMsg(role, text) {
   const div = document.createElement('div');
@@ -24,43 +22,35 @@ function setTyping(v) {
   typingEl.classList.toggle('hidden', !v);
 }
 
+
 async function startSession(mode) {
-  const r = await fetch(`${API_BASE}/api/session`, {
+  const r = await fetch(`${API_BASE}/api/session`, { 
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode }) // puede ser 'AI', 'human' o undefined
+    body: JSON.stringify({ mode }) // se envía AI o human o ""
   });
   const data = await r.json();
   sessionId = data.sessionId;
-  expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
-  ended = false;
-
-  if (endTimer) clearTimeout(endTimer);
-  if (expiresAt) {
-    const ms = Math.max(0, expiresAt.getTime() - Date.now());
-    endTimer = setTimeout(() => {
-      if (!ended) showDebrief();
-    }, ms);
-  }
 }
+/*
+// Evento del botón:
+document.getElementById('startBtn').addEventListener('click', async () => {
+  const mode = document.getElementById('modeSelect').value;
+  await startSession(mode);
+  poll();
+  setInterval(poll, 2000);
+});*/
 
 async function poll() {
   if (!sessionId) return;
   const r = await fetch(`${API_BASE}/api/messages?sessionId=${encodeURIComponent(sessionId)}&after=${lastIndex}`);
   const data = await r.json();
   const items = data.items || [];
-
   if (data.awaitingOperator) {
     setTyping(true);
   } else {
     setTyping(false);
   }
-
-  if (data.ended && !ended) {
-    ended = true;
-    await showDebrief();
-  }
-
   items.forEach(m => {
     lastIndex = Math.max(lastIndex, m.i);
     if (m.role === 'user') return;
@@ -70,10 +60,6 @@ async function poll() {
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (ended) {
-    addMsg('bot', '⏱️ La sesión ya terminó. Revisa el debrief.');
-    return;
-  }
   const text = input.value.trim();
   if (!text) return;
   addMsg('user', text);
@@ -87,27 +73,23 @@ form.addEventListener('submit', async (e) => {
   });
   const data = await r.json();
 
-  if (data.error) {
+  if (data.queued) {
+  } else if (data.reply) {
+    //addMsg('bot', data.reply);
+  } else if (data.error) {
     addMsg('bot', '⚠️ Error: ' + data.error);
-  } else if (data.ended) {
-    ended = true;
-    await showDebrief();
   }
   setTyping(false);
 });
 
-async function showDebrief() {
+btnDebrief.addEventListener('click', async () => {
   if (!sessionId) return;
   const r = await fetch(`${API_BASE}/debrief/${encodeURIComponent(sessionId)}`);
   const data = await r.json();
-  if (data.error) {
-    alert(data.error);
-    return;
-  }
-  ended = true;
+  if (data.error) return alert(data.error);
   const who = data.condition === 'AI' ? '🤖 IA' : '👤 Humano';
   alert(`Debrief:\nCondición: ${who}\nMensajes: ${data.transcript.length}`);
-}
+});
 
 startSession().then(() => {
   poll();
