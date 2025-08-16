@@ -34,30 +34,23 @@ function requireBasicAuth(req, res, next) {
 }
 
 // --- Memoria en RAM ---
-// sessions Map: id -> {
-//   id, condition: 'AI'|'human', createdAt, expiresAt, ended,
-//   messages: [{i,role:'user'|'ai'|'human'|'system',text,t}],
-//   awaitingOperator: boolean
-// }
+/**
+ * sessions Map: id -> {
+ *   id, condition: 'AI'|'human', createdAt, messages: [{i,role:'user'|'ai'|'human',text,t}],
+ *   awaitingOperator: boolean
+ * }
+ */
 const sessions = new Map();
 let globalIndex = 0; // contador para messages.i
 
 // Utilidades
 function createSession(condition) {
   const id = nanoid(10);
+  // Si no envían condition, sigue aleatorio
   if (!condition || !['AI', 'human'].includes(condition)) {
     condition = Math.random() < 0.5 ? 'AI' : 'human';
   }
-  const now = new Date();
-  const s = {
-    id,
-    condition,
-    createdAt: now.toISOString(),
-    expiresAt: new Date(now.getTime() + 5 * 60 * 1000).toISOString(), // ⏱️ 5 minutos
-    ended: false,
-    messages: [],
-    awaitingOperator: false
-  };
+  const s = { id, condition, createdAt: new Date().toISOString(), messages: [], awaitingOperator: false };
   sessions.set(id, s);
   return s;
 }
@@ -71,38 +64,30 @@ function isAwaitingOperator(session) {
   const last = session.messages[session.messages.length - 1];
   return !!last && last.role === 'user';
 }
-function isExpired(session) {
-  return Date.now() >= new Date(session.expiresAt).getTime();
-}
-function endSession(session) {
-  if (session.ended) return;
-  session.ended = true;
-  pushMessage(session, 'system', '⏱️ La sesión ha finalizado (duración: 5 minutos).');
-}
-function remainingMs(session) {
-  return Math.max(0, new Date(session.expiresAt).getTime() - Date.now());
-}
 
 // Gemini proxy (o stub)
 async function askGemini(prompt, history = []) {
+  // Si no hay API key -> responder stub
   if (!process.env.GEMINI_API_KEY) {
     return `🧪 (Stub IA) Me pediste: "${prompt}". Si configuras GEMINI_API_KEY responderé con Gemini.`;
   }
 
+  // API Gemini (modelo rápido y económico)
   const apiKey = process.env.GEMINI_API_KEY;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
-  //const url = https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey};
+  //const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
   const persona = (process.env.PERSONA_PROMPT || '').trim();
-  const contents = [
-    { role: 'user', parts: [{ text: persona }] },
-    ...history.map(h => ({
-      role: h.role === 'user' ? 'user' : 'model',
-      parts: [{ text: h.text }]
-    })),
-    { role: 'user', parts: [{ text: prompt }] }
-  ];
+
+const contents = [
+  { role: 'user', parts: [{ text: persona }] },
+  ...history.map(h => ({
+    role: h.role === 'user' ? 'user' : 'model',
+    parts: [{ text: h.text }]
+  })),
+  { role: 'user', parts: [{ text: prompt }] }
+];
+
 
   const r = await fetch(url, {
     method: 'POST',
@@ -124,10 +109,11 @@ async function askGemini(prompt, history = []) {
 app.get('/', (req, res) => res.send('pong'));
 
 // Crear sesión
+// En /api/session:
 app.post('/api/session', (req, res) => {
   const { mode } = req.body; // 'AI' o 'human'
   const s = createSession(mode);
-  res.json({ sessionId: s.id, expiresAt: s.expiresAt });
+  res.json({ sessionId: s.id });
 });
 
 // Enviar mensaje desde el cliente
@@ -138,30 +124,16 @@ app.post('/api/chat', async (req, res) => {
     const s = sessions.get(sessionId);
     if (!s) return res.status(404).json({ error: 'Sesión no encontrada' });
 
-    // Si ya venció, no aceptar más mensajes
-    if (isExpired(s)) {
-      endSession(s);
-      return res.json({
-        ended: true,
-        debrief: {
-          sessionId: s.id,
-          condition: s.condition,
-          createdAt: s.createdAt,
-          transcript: s.messages
-        }
-      });
-    }
-
     pushMessage(s, 'user', String(text).slice(0, 2000)); // límite sencillo
 
     if (s.condition === 'AI') {
       const history = s.messages.filter(m => m.role !== 'ai');
       const reply = await askGemini(text, history);
       pushMessage(s, 'ai', reply);
-      return res.json({ reply, queued: false, ended: false });
+      return res.json({ reply, queued: false });
     } else {
       s.awaitingOperator = true;
-      return res.json({ queued: true, ended: false });
+      return res.json({ queued: true });
     }
   } catch (err) {
     console.error(err);
@@ -174,17 +146,11 @@ app.get('/api/messages', (req, res) => {
   const { sessionId, after } = req.query;
   const s = sessions.get(sessionId);
   if (!s) return res.status(404).json({ error: 'Sesión no encontrada' });
-
-  // Autocierre si ya venció
-  if (isExpired(s)) endSession(s);
-
   const a = Number(after || 0);
   const news = s.messages.filter(m => m.i > a);
   res.json({
     items: news,
-    awaitingOperator: isAwaitingOperator(s),
-    ended: s.ended,
-    remainingMs: remainingMs(s)
+    awaitingOperator: isAwaitingOperator(s)
   });
 });
 
